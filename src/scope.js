@@ -34,10 +34,15 @@ Scope.prototype.$$digestOnce = function() {
 };
 
 Scope.prototype.$digest = function() {
+	// time to live 
+	var ttl = 10;
 	var dirty;
 
 	do {
 		dirty = this.$$digestOnce();
+		if (dirty && !(ttl--)) {
+			throw '10 digest iterations reached';
+		}
 	} while (dirty);
 };
 module.exports = Scope;
