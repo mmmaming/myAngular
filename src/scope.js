@@ -8,10 +8,11 @@ function Scope() {
 function initWatchVal() {
 
 }
-Scope.prototype.$watch = function(watchFn, listenerFn) {
+Scope.prototype.$watch = function(watchFn, listenerFn, valueEq) {
 	var watcher = {
 		watchFn: watchFn,
 		listenerFn: listenerFn || function() {},
+		valueEq: !!valueEq,
 		last: initWatchVal
 	};
 	this.$$watchers.push(watcher);
