@@ -69,6 +69,7 @@ Scope.prototype.$digest = function() {
 			asyncTask.scope.$eval(asyncTask.expression);
 		}
 		dirty = this.$$digestOnce();
+		// 如果是脏值或者$$asyncQueue中还有值
 		if ((dirty || this.$$asyncQueue.length) && !(ttl--)) {
 			this.$clearPhase();
 			throw '10 digest iterations reached';
@@ -104,6 +105,7 @@ Scope.prototype.$apply = function(expr) {
 
 Scope.prototype.$evalAsync = function(expr) {
 	var self = this;
+	// 如果是当前scope上的phase不存在或者$$asyncQueue异步队列中已经没有值了,是空的
 	if (!self.$$phase && !self.$$asyncQueue.length) {
 		setTimeout(function() {
 			if (self.$$asyncQueue.length) {
