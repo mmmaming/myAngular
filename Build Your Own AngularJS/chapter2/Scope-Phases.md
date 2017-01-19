@@ -130,6 +130,7 @@ Scope.prototype.$evalAsync = function(expr) {
 
 1.在调用setTimeout之前，我们要确保队列是空的，这是因为我们不想调用过多的setTimeout函数，超出我们的需要。如果队列里已经有值了，我们已经有了一个超时设置并且最终会消耗这个队列。（we already
 have a timeout set and it will eventually drain the queue）。
+
 2.在setTimeout函数内部我们要确保队列不是空的。在timeout函数执行之前，队列可能已经被其他一些原因消耗尽了。我们不想再开始一个不必要的$digest，如果我们已经没什么可做的话。
 
 有了这个实现，你可以确保当你调用$evalAsync的时候，一个$digest马上就会发生,不论你何时何地的调用它。

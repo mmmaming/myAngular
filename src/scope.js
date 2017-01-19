@@ -4,6 +4,7 @@ function Scope() {
 	this.$$watchers = [];
 	this.$$lastDirtyWatch = null;
 	this.$$asyncQueue = [];
+	this.$$applyAsyncQueue = [];
 	this.$$phase = null;
 }
 
@@ -103,6 +104,7 @@ Scope.prototype.$apply = function(expr) {
 	}
 };
 
+// 确保$evalAsync执行的时候，总是在稍后触发一个$digest脏检查.
 Scope.prototype.$evalAsync = function(expr) {
 	var self = this;
 	// 如果是当前scope上的phase不存在或者$$asyncQueue异步队列中已经没有值了,是空的
@@ -127,4 +129,18 @@ Scope.prototype.$clearPhase = function() {
 	this.$$phase = null;
 };
 
+Scope.prototype.$applyAsync = function(expr) {
+	var self = this;
+	self.$$applyAsyncQueue.push(function() {
+		self.$eval(expr);
+	});
+	setTimeout(function() {
+		self.$apply(function() {
+			while (self.$$applyAsyncQueue.length) {
+				// 执行applyAsyncQueue队列中的第一个函数并在数组里删除它
+				self.$$applyAsyncQueue.shift()();
+			}
+		});
+	}, 0);
+};
 module.exports = Scope;
