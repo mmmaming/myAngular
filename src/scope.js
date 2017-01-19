@@ -5,6 +5,7 @@ function Scope() {
 	this.$$lastDirtyWatch = null;
 	this.$$asyncQueue = [];
 	this.$$applyAsyncQueue = [];
+	this.$$applyAsyncId = null;
 	this.$$phase = null;
 }
 
@@ -96,7 +97,6 @@ Scope.prototype.$eval = function(expr, locals) {
 Scope.prototype.$apply = function(expr) {
 	try{
 		this.$beginPhase('$apply');
-
 		return this.$eval(expr);
 	} finally {
 		this.$clearPhase();
@@ -134,13 +134,16 @@ Scope.prototype.$applyAsync = function(expr) {
 	self.$$applyAsyncQueue.push(function() {
 		self.$eval(expr);
 	});
-	setTimeout(function() {
-		self.$apply(function() {
-			while (self.$$applyAsyncQueue.length) {
-				// 执行applyAsyncQueue队列中的第一个函数并在数组里删除它
-				self.$$applyAsyncQueue.shift()();
-			}
-		});
-	}, 0);
+	if (self.$$applyAsyncId === null) {
+		self.$$applyAsyncId = setTimeout(function() {
+			self.$apply(function() {
+				while (self.$$applyAsyncQueue.length) {
+					// 执行applyAsyncQueue队列中的第一个函数并在数组里删除它
+					self.$$applyAsyncQueue.shift()();
+				}
+				self.$$applyAsyncId = null;
+			});
+		}, 0);
+	}
 };
 module.exports = Scope;

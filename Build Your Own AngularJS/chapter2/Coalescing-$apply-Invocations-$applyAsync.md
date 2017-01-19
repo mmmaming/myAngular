@@ -94,3 +94,58 @@ Scope.prototype.$applyAsync = function(expr) {
 注意，我们没有给队列中每个单独的item都$apply,我们只在外部循环$apply了一次。
 ---
 正如我们讨论的那样，$applyAsync的要点是优化快速连续发生的事情，所以只需要一个$digest脏检查。
+```
+it('coalesces many calls to $applyAsync', function(done) {
+    scope.counter = 0;
+    scope.$watch(
+        function(scope) {
+            scope.counter++;
+            return scope.aValue;
+        },
+        function(newValue, oldValue, scope) { }
+    );
+    scope.$applyAsync(function(scope) {
+        scope.aValue = 'abc';
+    });
+    scope.$applyAsync(function(scope) {
+        scope.aValue = 'def';
+    });
+    setTimeout(function() {
+        expect(scope.counter).toBe(2);
+        done();
+    }, 50);
+});
+```
+我们想要counter变成2，而不是更多。我们要做的是保持追踪一个setTimeout是否排在队列里并且已经被调度，我们将这个信息保存在一个叫做$$applyAsyncId的Scope的私有属性中。
+```
+function Scope() {
+    this.$$watchers = [];
+    this.$$lastDirtyWatch = null;
+    this.$$asyncQueue = [];
+    this.$$applyAsyncQueue = [];
+    this.$$applyAsyncId = null;
+    this.$$phase = null;
+}
+
+```
+然后我们可以在调度作业中检查这个属性，并且保持它的状态当作业已经被调度并且完成。
+```
+Scope.prototype.$applyAsync = function(expr) {
+    var self = this;
+    self.$$applyAsyncQueue.push(function() {
+        self.$eval(expr);
+    });
+    if (self.$$applyAsyncId === null) {
+        self.$$applyAsyncId = setTimeout(function() {
+            self.$apply(function() {
+                while (self.$$applyAsyncQueue.length) {
+                    // 执行applyAsyncQueue队列中的第一个函数并在数组里删除它
+                    self.$$applyAsyncQueue.shift()();
+                }
+                self.$$applyAsyncId = null;
+            });
+        }, 0);
+    }
+};
+```
+$applyAsync的另一方面是它不应该发起一个$digest,如果在这个timeout触发之前恰好因为其他原因被启动，在那些情况下，$digest应该排在队列里并且$applyAsync timeout应该被调用。
