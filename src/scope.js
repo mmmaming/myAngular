@@ -136,14 +136,26 @@ Scope.prototype.$applyAsync = function(expr) {
 	});
 	if (self.$$applyAsyncId === null) {
 		self.$$applyAsyncId = setTimeout(function() {
-			self.$apply(function() {
-				while (self.$$applyAsyncQueue.length) {
-					// 执行applyAsyncQueue队列中的第一个函数并在数组里删除它
-					self.$$applyAsyncQueue.shift()();
-				}
-				self.$$applyAsyncId = null;
-			});
+			// self.$apply(function() {
+			// 	while (self.$$applyAsyncQueue.length) {
+			// 		// 执行applyAsyncQueue队列中的第一个函数并在数组里删除它
+			// 		self.$$applyAsyncQueue.shift()();
+			//
+			// 	}
+			// 	self.$$applyAsyncId = null;
+			// });
+			self.$apply(_.bind(self.$$flushApplyAsync, self));
 		}, 0);
 	}
 };
+
+Scope.prototype.$$flushApplyAsync = function() {
+	while (this.$$applyAsyncQueue.length) {
+		// 执行applyAsyncQueue队列中的第一个函数并在数组里删除它
+		this.$$applyAsyncQueue.shift()();
+	}
+	this.$$applyAsyncId = null;
+};
+
+
 module.exports = Scope;
