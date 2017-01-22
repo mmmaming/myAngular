@@ -35,22 +35,22 @@ describe('$applyAsync', function() {
 到目前为止，这和`$evalAsync`并没有什么不同，但是当我们从`listener`函数中调用`$applyAsync`时，就会看到不同的地方了，如果使用`$evalAsync`，函数会在同一个`$digest`中被调用，但是`$applyAsync`会延迟调用。
 ```
 it('never executes $applyAsynced function in the same cycle', function(done) {
-scope.aValue = [1, 2, 3];
-scope.asyncApplied = false;
-scope.$watch(
-function(scope) { return scope.aValue; },
-function(newValue, oldValue, scope) {
-scope.$applyAsync(function(scope) {
-scope.asyncApplied = true;
-});
-}
-);
-scope.$digest();
-expect(scope.asyncApplied).toBe(false);
-setTimeout(function() {
-expect(scope.asyncApplied).toBe(true);
-done();
-}, 50);
+    scope.aValue = [1, 2, 3];
+    scope.asyncApplied = false;
+    scope.$watch(
+        function(scope) { return scope.aValue; },
+        function(newValue, oldValue, scope) {
+            scope.$applyAsync(function(scope) {
+            scope.asyncApplied = true;
+    });
+    }
+    );
+    scope.$digest();
+    expect(scope.asyncApplied).toBe(false);
+    setTimeout(function() {
+        expect(scope.asyncApplied).toBe(true);
+        done();
+    }, 50);
 });
 ```
 让我们在Scope的contructor中加入另一个队列来实现`$applyAsync`.
