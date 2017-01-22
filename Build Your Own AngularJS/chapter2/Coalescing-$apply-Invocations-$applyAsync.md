@@ -180,3 +180,70 @@ it('cancels and ﬂushes $applyAsync if digested frst', function(done) {
 ```
 
 这里我们已经测试过了，如果我们发起$digest脏检查，我们通过$applyAsync调度的事情会立即触发。
+
+让我们吧$applyAsync函数内部执行队列里方法的部分提取出来作为`$$ﬂushApplyAsync`方法，从而能使我们在任何地方都可以调用他。
+```
+Scope.prototype.$$flushApplyAsync = function() {
+	while (this.$$applyAsyncQueue.length) {
+		// 执行applyAsyncQueue队列中的第一个函数并在数组里删除它
+		this.$$applyAsyncQueue.shift()();
+	}
+	this.$$applyAsyncId = null;
+};
+
+Scope.prototype.$applyAsync = function(expr) {
+var self = this;
+self.$$applyAsyncQueue.push(function() {
+    self.$eval(expr);
+});
+if (self.$$applyAsyncId === null) {
+    self.$$applyAsyncId = setTimeout(function() {
+        // self.$apply(function() {
+        // 	while (self.$$applyAsyncQueue.length) {
+        // 		// 执行applyAsyncQueue队列中的第一个函数并在数组里删除它
+        // 		self.$$applyAsyncQueue.shift()();
+        //
+        // 	}
+        // 	self.$$applyAsyncId = null;
+        // });
+        self.$apply(_.bind(self.$$flushApplyAsync, self));
+    }, 0);
+}
+};
+```
+
+---
+`_.bind()`等同于ECMAScript 5 的 `Function.prototype.bind`
+---
+
+现在我们也可以从`$digest`调用这个函数 - 如果有一个`$applyAsync`刷新`timeout`目前正在等待，我们取消它并立即刷新工作：
+
+```
+Scope.prototype.$digest = function() {
+	// time to live
+	var ttl = 10;
+	var dirty;
+	this.$$lastDirtyWatch = null;
+	this.$beginPhase('$digest');
+
+	if (this.$$applyAsyncId) {
+		clearTimeout(this.$$applyAsyncId);
+		this.$$flushApplyAsync();
+	}
+	do {
+		while (this.$$asyncQueue.length) {
+			var asyncTask = this.$$asyncQueue.shift();
+			asyncTask.scope.$eval(asyncTask.expression);
+		}
+		dirty = this.$$digestOnce();
+		// 如果是脏值或者$$asyncQueue中还有值
+		if ((dirty || this.$$asyncQueue.length) && !(ttl--)) {
+			this.$clearPhase();
+			throw '10 digest iterations reached';
+		}
+	} while (dirty || this.$$asyncQueue.length);
+	this.$clearPhase();
+};
+```
+
+这就是`$applyAsync`，对`$apply`做了优化，如果你知道你要在短时间内用几次`$apply`,则可以用`$applyAsync`来代替。

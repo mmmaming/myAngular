@@ -65,6 +65,11 @@ Scope.prototype.$digest = function() {
 	var dirty;
 	this.$$lastDirtyWatch = null;
 	this.$beginPhase('$digest');
+
+	if (this.$$applyAsyncId) {
+		clearTimeout(this.$$applyAsyncId);
+		this.$$flushApplyAsync();
+	}
 	do {
 		while (this.$$asyncQueue.length) {
 			var asyncTask = this.$$asyncQueue.shift();
