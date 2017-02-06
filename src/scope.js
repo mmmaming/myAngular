@@ -54,7 +54,7 @@ Scope.prototype.$$digestOnce = function() {
 	            }
             }
         } catch (e) {
-            console.log(e);
+            console.error(e);
         }
 	});
 	return dirty;
@@ -73,8 +73,12 @@ Scope.prototype.$digest = function() {
 	}
 	do {
 		while (this.$$asyncQueue.length) {
-			var asyncTask = this.$$asyncQueue.shift();
-			asyncTask.scope.$eval(asyncTask.expression);
+			try {
+				var asyncTask = this.$$asyncQueue.shift();
+				asyncTask.scope.$eval(asyncTask.expression);
+			} catch (e) {
+				console.error(e);
+			}
 		}
 		dirty = this.$$digestOnce();
 		// 如果是脏值或者$$asyncQueue中还有值
@@ -86,7 +90,11 @@ Scope.prototype.$digest = function() {
 	this.$clearPhase();
 
 	while (this.$$postDigestQueue.length) {
-		this.$$postDigestQueue.shift()();
+		try {
+			this.$$postDigestQueue.shift()();
+		} catch (e) {
+			console.error(e);
+		}
 	}
 };
 
@@ -162,7 +170,11 @@ Scope.prototype.$applyAsync = function(expr) {
 Scope.prototype.$$flushApplyAsync = function() {
 	while (this.$$applyAsyncQueue.length) {
 		// 执行applyAsyncQueue队列中的第一个函数并在数组里删除它
-		this.$$applyAsyncQueue.shift()();
+		try {
+			this.$$applyAsyncQueue.shift()();
+		} catch (e) {
+			console.error(e);
+		}
 	}
 	this.$$applyAsyncId = null;
 };
