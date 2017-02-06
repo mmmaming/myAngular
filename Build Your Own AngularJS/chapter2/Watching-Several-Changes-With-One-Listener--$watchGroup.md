@@ -173,3 +173,224 @@ it('uses different arrays for old and new values on subsequent runs', function()
 ```
 
 我们可以通过在watchGroup的listener中检查它是否第一次被调用来实现这个需求，如果是，我们将把原来的newValues数组传递给原始的listener两次。
+```
+Scope.prototype.$watchGroup = function(watchFns, listenerFn) {
+    var self = this;
+    var newValues = new Array(watchFns.length);
+    var oldValues = new Array(watchFns.length);
+    var changeReactionScheduled = false;
+    var firstRun = true;
+
+    function watchGroupListener() {
+        if (firstRun) {
+            firstRun = false;
+            listenerFn(newValues, newValues, self);
+        } else {
+            listenerFn(newValues, oldValues, self);
+        }
+        changeReactionScheduled = false;
+    }
+    _.forEach(watchFns, function(watchFn, i) {
+        self.$watch(watchFn, function(newValue, oldValue) {
+            newValues[i] = newValue;
+            oldValues[i] = oldValue;
+            if (!changeReactionScheduled) {
+                changeReactionScheduled = true;
+                self.$evalAsync(watchGroupListener);
+            }
+        });
+    });
+};
+```
+另一种特殊的情况是watch数组恰好为空时。目前的实现显然什么都没做，如果没有watchers，没有listerner会被发起，Angular实际上做的是会确保listener会调用一次，用空数组作为值。
+
+```
+it('calls the listener once when the watch array is empty', function() {
+    var gotNewValues, gotOldValues;
+
+    scope.$watchGroup([], function(newValues, oldValues, scope) {
+        gotNewValues = newValues;
+        gotOldValues = oldValues;
+    });
+
+    scope.$digest();
+    expect(gotNewValues).toEqual([]);
+    expect(gotOldValues).toEqual([]);
+});
+```
+
+我们要做的是在`$watchGroup`检查空数组的案例，调用一下listener，然后返回而不必做任何进一步的设置。
+
+```
+Scope.prototype.$watchGroup = function(watchFns, listenerFn) {
+    var self = this;
+    var newValues = new Array(watchFns.length);
+    var oldValues = new Array(watchFns.length);
+    var changeReactionScheduled = false;
+    var firstRun = true;
+
+    if (watchFns.length === 0) {
+        self.$evalAsync(function() {
+            listenerFn(newValues, oldValues, self);
+        });
+        return;
+    }
+
+    function watchGroupListener() {
+        if (firstRun) {
+            firstRun = false;
+            listenerFn(newValues, newValues, self);
+        } else {
+            listenerFn(newValues, oldValues, self);
+        }
+        changeReactionScheduled = false;
+    }
+    _.forEach(watchFns, function(watchFn, i) {
+        self.$watch(watchFn, function(newValue, oldValue) {
+            newValues[i] = newValue;
+            oldValues[i] = oldValue;
+            if (!changeReactionScheduled) {
+                changeReactionScheduled = true;
+                self.$evalAsync(watchGroupListener);
+            }
+        });
+    });
+};
+```
+
+我们需要为`$watchGroup`做的最后一个功能是注销。一个可以注销的watch组应该与注销单个watch的方式完全相同，通过`$watchGroup`返回一个remove函数。
+
+```
+it('can be deregistered', function() {
+    var counter = 0;
+    scope.aValue = 1;
+    scope.anotherValue = 2;
+    var destroyGroup = scope.$watchGroup([function(scope) {
+        return scope.aValue;
+    }, function(scope) {
+        return scope.anotherValue;
+    }], function(newValues, oldValues, scope) {
+        counter++;
+    });
+
+    scope.$digest();
+    scope.anotherValue = 3;
+    destroyGroup();
+    scope.$digest();
+    expect(counter).toBe(1);
+});
+```
+
+这里我们测试了一旦销毁函数被调用，进一步的改变不会引起listener函数调用。因为各个注册的watch已经返回了remove（移除）函数，我们真正需要做的是收集他们，然后创建一个销毁函数来调用他们。
+
+```
+Scope.prototype.$watchGroup = function(watchFns, listenerFn) {
+    var self = this;
+    var newValues = new Array(watchFns.length);
+    var oldValues = new Array(watchFns.length);
+    var changeReactionScheduled = false;
+    var firstRun = true;
+
+    if (watchFns.length === 0) {
+        self.$evalAsync(function() {
+            listenerFn(newValues, oldValues, self);
+        });
+        return;
+    }
+
+    function watchGroupListener() {
+        if (firstRun) {
+            firstRun = false;
+            listenerFn(newValues, newValues, self);
+        } else {
+            listenerFn(newValues, oldValues, self);
+        }
+        changeReactionScheduled = false;
+    }
+    // _.forEach(watchFns, function(watchFn, i) {
+    var destroyFunctions = _.map(watchFns, function(watchFn, i) {   
+        return self.$watch(watchFn, function(newValue, oldValue) {
+            newValues[i] = newValue;
+            oldValues[i] = oldValue;
+            if (!changeReactionScheduled) {
+                changeReactionScheduled = true;
+                self.$evalAsync(watchGroupListener);
+            }
+        });
+    });
+
+    return function() {
+        _.forEach(destroyFunctions, function(destroyFunction) {
+            destroyFunction();
+        });
+    };
+};
+```
+
+有一种情况是watch的数组是空的，他需要删除自己的watch函数。在这种情况下listener只能调用一次，但是甚至在第一次$digest发生之前，销毁函数仍然可以被调用。在这种情况下，即使是单个的调用也应该被跳过。
+
+```
+it('does not call the zero-watch listener when deregistered frst', function() {
+    var counter = 0;
+
+    var destroyGroup = scope.$watchGroup([], function(newValues, oldValues, scope) {
+        counter++;
+    });
+
+    destroyGroup();
+    scope.$digest();
+    expect(counter).toEqual(0);
+});
+```
+
+这种情况下的销毁函数只是设置了一个布尔值，在调用之前检查listener函数。
+
+```
+Scope.prototype.$watchGroup = function(watchFns, listenerFn) {
+    var self = this;
+    var newValues = new Array(watchFns.length);
+    var oldValues = new Array(watchFns.length);
+    var changeReactionScheduled = false;
+    var firstRun = true;
+
+    if (watchFns.length === 0) {
+        var shouldCall = true;
+        self.$evalAsync(function() {
+            if (shouldCall) {
+                listenerFn(newValues, oldValues, self);
+            }
+        });
+        return function() {
+            shouldCall = false;
+        };
+    }
+
+    function watchGroupListener() {
+        if (firstRun) {
+            firstRun = false;
+            listenerFn(newValues, newValues, self);
+        } else {
+            listenerFn(newValues, oldValues, self);
+        }
+        changeReactionScheduled = false;
+    }
+    // _.forEach(watchFns, function(watchFn, i) {
+    var destroyFunctions = _.map(watchFns, function(watchFn, i) {   
+        return self.$watch(watchFn, function(newValue, oldValue) {
+            newValues[i] = newValue;
+            oldValues[i] = oldValue;
+            if (!changeReactionScheduled) {
+                changeReactionScheduled = true;
+                self.$evalAsync(watchGroupListener);
+            }
+        });
+    });
+
+    return function() {
+        _.forEach(destroyFunctions, function(destroyFunction) {
+            destroyFunction();
+        });
+    };
+};
+```
+

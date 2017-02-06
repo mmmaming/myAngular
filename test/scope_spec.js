@@ -778,5 +778,49 @@ describe('Scope', function() {
 			expect(gotNewValues).toEqual([1, 3]);
 			expect(gotOldValues).toEqual([1, 2]);
 		});
+
+		it('calls the listener once when the watch array is empty', function() {
+			var gotNewValues, gotOldValues;
+
+			scope.$watchGroup([], function(newValues, oldValues, scope) {
+				gotNewValues = newValues;
+				gotOldValues = oldValues;
+			});
+
+			scope.$digest();
+			expect(gotNewValues).toEqual([]);
+			expect(gotOldValues).toEqual([]);
+		});
+
+		it('can be deregistered', function() {
+			var counter = 0;
+			scope.aValue = 1;
+			scope.anotherValue = 2;
+			var destroyGroup = scope.$watchGroup([function(scope) {
+				return scope.aValue;
+			}, function(scope) {
+				return scope.anotherValue;
+			}], function(newValues, oldValues, scope) {
+				counter++;
+			});
+
+			scope.$digest();
+			scope.anotherValue = 3;
+			destroyGroup();
+			scope.$digest();
+			expect(counter).toBe(1);
+		});
+
+		it('does not call the zero-watch listener when deregistered frst', function() {
+			var counter = 0;
+
+			var destroyGroup = scope.$watchGroup([], function(newValues, oldValues, scope) {
+				counter++;
+			});
+
+			destroyGroup();
+			scope.$digest();
+			expect(counter).toEqual(0);
+		});
 	});
 });
