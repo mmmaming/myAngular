@@ -211,8 +211,7 @@ Scope.prototype.$watchGroup = function(watchFns, listenerFn) {
 		}
 		changeReactionScheduled = false;
 	}
-	// _.forEach(watchFns, function(watchFn, i) {
-	var destroyFunctions = _.map(watchFns, function(watchFn, i) {	
+	var destroyFunctions = _.map(watchFns, function(watchFn, i) {
 		return self.$watch(watchFn, function(newValue, oldValue) {
 			newValues[i] = newValue;
 			oldValues[i] = oldValue;
@@ -230,5 +229,11 @@ Scope.prototype.$watchGroup = function(watchFns, listenerFn) {
 	};
 };
 
+Scope.prototype.$new = function() {
+	var ChildScope = function() {};
+	ChildScope.prototype = this;
+	var child = new ChildScope();
+	return child;
+};
 
 module.exports = Scope;
