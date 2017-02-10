@@ -7,6 +7,7 @@ function Scope() {
 	this.$$applyAsyncQueue = [];
 	this.$$applyAsyncId = null;
 	this.$$postDigestQueue = [];
+	this.$$children = [];
 	this.$$phase = null;
 }
 
@@ -34,28 +35,33 @@ Scope.prototype.$watch = function(watchFn, listenerFn, valueEq) {
 };
 
 Scope.prototype.$$digestOnce = function() {
+	var dirty;
+	var continueLoop = true;
 	var self = this;
-	var newValue, oldValue, dirty;
-	_.forEachRight(this.$$watchers, function(watcher) {
-		try {
-            if (watcher) {
-            	newValue = watcher.watchFn(self);
-	            oldValue = watcher.last;
-	            // 判断newValue和oldValue如果不相等（注意引用传递和值传递的区别）
-	            if (!self.$$areEqual(newValue, oldValue, watcher.valueEq)) {
-	                self.$$lastDirtyWatch = watcher;
-	                watcher.last = (watcher.valueEq ? _.cloneDeep(newValue) : newValue);
-	                watcher.listenerFn(newValue,
-	                    (oldValue === initWatchVal ? newValue : oldValue),
-	                    self);
-	                dirty = true;
-	            } else if(self.$$lastDirtyWatch === watcher) {
-	                return false;
-	            }
-            }
-        } catch (e) {
-            console.error(e);
-        }
+	this.$$everyScope(function(scope) {
+		var newValue, oldValue;
+		_.forEachRight(scope.$$watchers, function(watcher) {
+			try {
+				if (watcher) {
+					newValue = watcher.watchFn(scope);
+					oldValue = watcher.last;
+					if (!scope.$$areEqual(newValue, oldValue, watcher.valueEq)) {
+						self.$$lastDirtyWatch = watcher;
+						watcher.last = (watcher.valueEq ? _.cloneDeep(newValue) : newValue);
+						watcher.listenerFn(newValue,
+							(oldValue === initWatchVal ? newValue : oldValue),
+							scope);
+						dirty = true;
+					} else if (self.$$lastDirtyWatch === watcher) {
+						continueLoop = false;
+						return false;
+					}
+				}
+			} catch (e) {
+				console.error(e);
+			}
+		});
+		return continueLoop;
 	});
 	return dirty;
 };
@@ -230,10 +236,23 @@ Scope.prototype.$watchGroup = function(watchFns, listenerFn) {
 };
 
 Scope.prototype.$new = function() {
-	var ChildScope = function() {};
+	var ChildScope = function() { };
 	ChildScope.prototype = this;
 	var child = new ChildScope();
+	this.$$children.push(child);
+	child.$$watchers = [];
+	child.$$children = [];
 	return child;
+};
+
+Scope.prototype.$$everyScope = function(fn) {
+	if (fn(this)) {
+		return this.$$children.every(function(child) {
+			return child.$$everyScope(fn);
+		});
+	} else {
+		return false;
+	}
 };
 
 module.exports = Scope;
