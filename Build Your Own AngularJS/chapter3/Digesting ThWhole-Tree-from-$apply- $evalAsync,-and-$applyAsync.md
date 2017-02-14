@@ -169,3 +169,34 @@ Scope.prototype.$digest = function() {
 
 最后，在$$digestOnce中也应该这么做。
 
+```
+Scope.prototype.$$digestOnce = function() {
+	var dirty;
+	this.$$everyScope(function(scope) {
+		var newValue, oldValue;
+		_.forEachRight(scope.$$watchers, function(watcher) {
+			try {
+				if (watcher) {
+					newValue = watcher.watchFn(scope);
+					oldValue = watcher.last;
+					if (!scope.$$areEqual(newValue, oldValue, watcher.valueEq)) {
+						scope.$root.$$lastDirtyWatch = watcher;
+						watcher.last = (watcher.valueEq ? _.cloneDeep(newValue) : newValue);
+						watcher.listenerFn(newValue,
+							(oldValue === initWatchVal ? newValue : oldValue),
+							scope);
+						dirty = true;
+					} else if (scope.$root.$$lastDirtyWatch === watcher) {
+						dirty = false;
+						return false;
+					}
+				}
+			} catch (e) {
+				console.error(e);
+			}
+		});
+		return dirty !== false;
+	});
+	return dirty;
+};
+```
